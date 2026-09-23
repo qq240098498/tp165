@@ -36,6 +36,9 @@
     selectedBillId: '',
     billDetail: null,
     billLoading: false,
+    billPreflight: null,      // 出账前检查结果
+    billPreflightKey: '',     // 上次检查对应的 period|customerId
+    billPreflightLoading: false,
     quote: null,              // 最近一次单条计费结果
     confirm: null             // { kind, id } 二次确认删除
   };
@@ -537,13 +540,17 @@
       quoteHtml +
       '<div class="btn-stack">' +
       '<button type="button" class="btn btn-primary" data-action="quote-waybill" data-id="' + attr(item.id) + '">单条计费</button>' +
-      '<button type="button" class="btn" data-action="edit-waybill" data-id="' + attr(item.id) + '">编辑这条运单</button>' +
+      (item.locked
+        ? '<button type="button" class="btn" disabled>已进账单 ' + esc(item.billCode || '') + '，不能修改</button>'
+        : '<button type="button" class="btn" data-action="edit-waybill" data-id="' + attr(item.id) + '">编辑这条运单</button>') +
       (item.locked
         ? '<button type="button" class="btn" disabled>已进账单，不能删除</button>'
         : '<button type="button" class="btn btn-danger' + (state.confirm && state.confirm.kind === 'waybill' && state.confirm.id === item.id ? ' is-armed' : '') + '" data-action="delete-waybill" data-id="' + attr(item.id) + '">' +
         (state.confirm && state.confirm.kind === 'waybill' && state.confirm.id === item.id ? '确认删除（再点一次）' : '删除这条运单') + '</button>') +
       '</div>' +
-      (item.locked ? '<p class="foot-note">这条运单已经进账单，先作废对应账单才能删除。</p>' : '');
+      (item.locked
+        ? '<p class="foot-note">这条运单已被账单 ' + esc(item.billCode || '') + ' 锁定，先作废对应账单才能修改或删除。</p>'
+        : '<p class="foot-note">这条运单还没进账单，可以直接修改或删除；出账被锁定后要先作废账单。</p>');
 
     return paneBlock('运单详情', item.id, detail);
   }
@@ -1051,6 +1058,47 @@
     return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
   }
 
+  function preflightPanelHtml() {
+    var pf = state.billPreflight;
+    if (!pf) {
+      return '<div class="block"><h3 class="block-title">出账前检查</h3>' +
+        '<p class="block-hint">选好账期和客户后点检查，先看这批运单里有没有已经入账的，避免同一批货重复出账。</p>' +
+        '<button type="button" class="btn btn-ghost btn-block" data-action="check-billing">检查这批运单</button></div>';
+    }
+    var available = pf.available || [];
+    var already = pf.alreadyBilled || [];
+    var availHtml = available.length
+      ? '<div class="chips">' + available.map(function (w) {
+        return '<span class="chip">' + esc(w.code) + '</span>';
+      }).join('') + '</div>'
+      : '<p class="block-hint warn-text">没有可出账的运单。</p>';
+    var alreadyHtml = already.length
+      ? '<div class="chips">' + already.map(function (w) {
+        return '<button type="button" class="chip chip-btn is-amber" data-action="select-bill" data-id="' + attr(w.billId) + '" title="打开账单 ' + attr(w.billCode) + '">' +
+          esc(w.code) + ' → ' + esc(w.billCode) + '</button>';
+      }).join('') + '</div>'
+      : '<p class="block-hint">没有已入账的运单，可以整批出账。</p>';
+    var generateBtn = already.length
+      ? '<button type="button" class="btn btn-primary btn-block" disabled>有 ' + num(already.length) + ' 条已入账，先作废原账单才能出账</button>'
+      : (available.length
+        ? '<button type="button" class="btn btn-primary btn-block" data-action="generate-bill">对 ' + num(available.length) + ' 条运单出账</button>'
+        : '<button type="button" class="btn btn-primary btn-block" disabled>没有可出账的运单</button>');
+    return '<div class="block"><h3 class="block-title">出账前检查（' + esc(pf.period) + '）</h3>' +
+      '<p class="block-hint warn-text" id="preflightStale" hidden>账期已改动，下面的结果可能过期，请重新检查。</p>' +
+      '<div class="stat-list">' +
+      '<div class="stat-row"><span class="stat-name">这批运单总数</span><span class="stat-val">' + num(pf.total) + ' 条</span></div>' +
+      '<div class="stat-row"><span class="stat-name">可以出账</span><span class="stat-val">' + num(pf.availableCount) + ' 条</span></div>' +
+      '<div class="stat-row"><span class="stat-name">已经入账（会被挡住）</span><span class="stat-val' + (already.length ? ' warn-text' : '') + '">' + num(pf.alreadyBilledCount) + ' 条</span></div>' +
+      '</div>' +
+      (already.length ? '<p class="block-hint warn-text">下面这些运单已经在已出账账单里，点运单可打开对应账单；先把原账单作废，它们才会解锁。</p>' : '') +
+      alreadyHtml +
+      '<h4 class="block-title" style="margin-top:10px;">可出账运单</h4>' +
+      availHtml +
+      '<div class="btn-row" style="margin-top:10px;">' + generateBtn +
+      '<button type="button" class="btn btn-ghost" data-action="check-billing">重新检查</button></div>' +
+      '</div>';
+  }
+
   function renderBillsLeft() {
     var bills = state.bills.bills || [];
     var issuedAmount = bills.reduce(function (sum, bill) {
@@ -1068,9 +1116,11 @@
       '<label class="field" data-field-wrap="customerId"><span class="field-label">客户</span>' +
       '<select id="billCustomerId">' + customerOptionsHtml('', '请选择客户') + '</select>' +
       '<span class="field-msg"></span></label>' +
+      '<button type="button" class="btn btn-ghost btn-block" data-action="check-billing">先检查这批运单</button>' +
       '<button type="button" class="btn btn-primary btn-block" data-action="generate-bill">按账期与客户出账</button>' +
-      '<p class="foot-note">可选账期来自现有运单与账单（GET /api/periods）。同一账期同一客户可以重复出账，编号会自动顺延。</p>' +
+      '<p class="foot-note">出账会先检查重复：这批运单里只要有一条还在「已出账」账单里，整笔出账就会被挡住；把原账单作废、运单解锁后才能重新出账。</p>' +
       '</div>' +
+      (state.billPreflightLoading ? '<div class="loading">正在检查这批运单…</div>' : preflightPanelHtml()) +
       '<div class="block"><h3 class="block-title">账单统计</h3>' +
       '<div class="stat-list">' +
       '<div class="stat-row"><span class="stat-name">账单总数</span><span class="stat-val">' + num(state.bills.total) + ' 张</span></div>' +
@@ -1139,6 +1189,21 @@
       '</table></div>'
       : emptyBlock('这张账单没有明细行', '可以作废后重新出账。');
 
+    var releasedHtml = '';
+    if (bill.status === '已作废') {
+      var releasedIds = bill.releasedWaybillIds || [];
+      releasedHtml = '<div class="panel is-amber"><h4 class="panel-title">作废解锁记录</h4>' +
+        (releasedIds.length
+          ? '<p class="block-hint">作废时已解锁 ' + num(bill.releasedCount) + ' 条运单，它们现在可以修改、删除或重新出账：</p>' +
+          '<div class="chips">' + releasedIds.map(function (id) {
+            // 明细行里找运单号；找不到就退回显示内部 id
+            var line = lines.filter(function (l) { return l.waybillId === id; })[0];
+            return '<span class="chip is-amber">' + esc(line ? line.code : id) + '</span>';
+          }).join('') + '</div>'
+          : '<p class="block-hint">作废时名下没有需要解锁的运单。</p>') +
+        '</div>';
+    }
+
     var head =
       '<div class="detail-head">' +
       '<span class="detail-title">' + esc(bill.code) + '</span>' +
@@ -1156,15 +1221,18 @@
       '<div class="amount-row"><span>账单金额</span><b>' + esc(bill.amountText || money(bill.amountYuan)) + ' 元</b></div>' +
       '<div class="amount-row is-total"><span>明细合计</span><b>' + esc(bill.lineSumText || money(bill.lineSumYuan)) + ' 元</b></div>' +
       '</div>' +
+      releasedHtml +
       '<div class="block"><h3 class="block-title">逐条明细</h3>' + table + '</div>' +
       '<div class="btn-stack">' +
       (bill.status === '已出账'
         ? '<button type="button" class="btn btn-danger' + (state.confirm && state.confirm.kind === 'bill' && state.confirm.id === bill.id ? ' is-armed' : '') + '" data-action="void-bill" data-id="' + attr(bill.id) + '">' +
-        (state.confirm && state.confirm.kind === 'bill' && state.confirm.id === bill.id ? '确认作废（再点一次）' : '作废这张账单') + '</button>'
-        : '<button type="button" class="btn" disabled>账单已作废</button>') +
+        (state.confirm && state.confirm.kind === 'bill' && state.confirm.id === bill.id ? '确认作废（再点一次）' : '作废这张账单（解锁 ' + num(bill.waybillCount) + ' 条运单）') + '</button>'
+        : '<button type="button" class="btn" disabled>账单已作废，运单已解锁</button>') +
       '<button type="button" class="btn btn-ghost" data-action="reload-bill" data-id="' + attr(bill.id) + '">重新读取明细</button>' +
       '</div>' +
-      '<p class="foot-note">作废只是把账单状态改成已作废，运单上的入账标记仍然保留。</p>';
+      (bill.status === '已出账'
+        ? '<p class="foot-note">作废会把这张账单名下的运单全部解锁，解锁后可以修改、删除或重新出账。</p>'
+        : '<p class="foot-note">这张账单已作废，名下运单已解锁，可以重新出账；本页保留作历史记录。</p>');
 
     return paneBlock('账单详情', bill.id, head);
   }
@@ -1198,21 +1266,57 @@
     }
   }
 
-  async function generateBill() {
+  function readBillSelection() {
     var periodEl = document.getElementById('billPeriod');
     var customerEl = document.getElementById('billCustomerId');
-    if (!periodEl || !customerEl) return;
+    if (!periodEl || !customerEl) return null;
+    return { period: String(periodEl.value).trim(), customerId: String(customerEl.value).trim() };
+  }
+
+  async function checkBilling() {
+    var sel = readBillSelection();
+    if (!sel) return;
     clearFieldErrors();
-    var payload = { period: String(periodEl.value).trim(), customerId: String(customerEl.value).trim() };
+    if (!sel.period || !sel.customerId) {
+      fail(new Error('要先选好账期和客户再检查'));
+      return;
+    }
+    state.billPreflightLoading = true;
+    renderLeft();
     try {
-      var created = await api('POST', '/api/bills/generate', payload);
+      var pf = await api('POST', '/api/bills/preflight', sel);
+      state.billPreflight = pf;
+      state.billPreflightKey = sel.period + '|' + sel.customerId;
+      setStatus('检查完成：可出账 ' + num(pf.availableCount) + ' 条，已入账 ' + num(pf.alreadyBilledCount) + ' 条');
+    } catch (err) {
+      state.billPreflight = null;
+      fail(err);
+    } finally {
+      state.billPreflightLoading = false;
+      renderLeft();
+    }
+  }
+
+  async function generateBill() {
+    var sel = readBillSelection();
+    if (!sel) return;
+    clearFieldErrors();
+    try {
+      var created = await api('POST', '/api/bills/generate', sel);
       state.selectedBillId = created.id;
+      state.billPreflight = null;
+      state.billPreflightKey = '';
       state.confirm = null;
       await refreshAll();
       render();
       await loadBillDetail(created.id);
-      ok('已出账：' + created.code + '（' + created.customerName + ' · ' + created.period + '，金额 ' + money(created.amountYuan) + ' 元）');
+      ok('已出账：' + created.code + '（' + created.customerName + ' · ' + created.period + '，锁定 ' + num(created.waybillCount) + ' 条运单，金额 ' + money(created.amountYuan) + ' 元）');
     } catch (err) {
+      // 被重复出账挡住时，直接把这批运单的检查结果列出来，让用户看到是哪几条、在哪张账单里
+      if (err.code === 'BILL_WAYBILLS_ALREADY_BILLED') {
+        state.billPreflightKey = '';
+        await checkBilling();
+      }
       fail(err);
     }
   }
@@ -1221,10 +1325,14 @@
     try {
       var voided = await api('POST', '/api/bills/' + encodeURIComponent(id) + '/void');
       state.confirm = null;
+      var released = voided.releasedWaybills || [];
+      var codes = released.map(function (w) { return w.code; });
       await refreshAll();
+      state.billPreflight = null;
+      state.billPreflightKey = '';
       state.billDetail = voided;
       render();
-      ok('已作废账单 ' + voided.code + '，状态：' + voided.status);
+      ok('已作废账单 ' + voided.code + '，解锁 ' + num(released.length) + ' 条运单' + (codes.length ? '：' + codes.join('、') : '') + '；这些运单现在可以修改或重新出账');
     } catch (err) {
       fail(err);
     }
@@ -1310,6 +1418,13 @@
     if (el.id === 'wbKeyword') { liveWaybillFilter(); return; }
     if (el.id === 'zoneKeyword') { state.zoneFilter.keyword = el.value; renderMid(); return; }
     if (el.id === 'customerKeyword') { state.customerFilter.keyword = el.value; renderMid(); return; }
+    if (el.id === 'billPeriod') { markPreflightStale(); return; }
+  }
+
+  function markPreflightStale() {
+    if (!state.billPreflight) return;
+    var banner = document.getElementById('preflightStale');
+    if (banner) banner.hidden = false;
   }
 
   function onLeftChange(event) {
@@ -1318,6 +1433,12 @@
     if (el.id === 'zoneStatus') { state.zoneFilter.status = el.value; renderMid(); renderLeft(); return; }
     if (el.id === 'customerSettle') { state.customerFilter.settle = el.value; renderMid(); renderLeft(); return; }
     if (el.id === 'customerStatus') { state.customerFilter.status = el.value; renderMid(); renderLeft(); return; }
+    // 换了出账客户：旧的检查结果作废，重绘左侧面板
+    if (el.id === 'billCustomerId') {
+      state.billPreflight = null;
+      state.billPreflightKey = '';
+      renderLeft();
+    }
   }
 
   function onLeftKeydown(event) {
@@ -1516,6 +1637,7 @@
         break;
 
       case 'generate-bill': await generateBill(); break;
+      case 'check-billing': await checkBilling(); break;
       case 'select-bill': await selectBill(id); break;
       case 'reload-bill': await loadBillDetail(id); if (state.billDetail) setStatus('已重新读取账单 ' + state.billDetail.code + ' 的明细'); break;
       case 'void-bill':

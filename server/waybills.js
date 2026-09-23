@@ -2,7 +2,9 @@ const { badRequest, notFound } = require('./errors');
 const { load, save, nextId } = require('./store');
 const pricing = require('./pricing');
 const zones = require('./zones');
-const { findCustomer } = require('./customers');
+const customers = require('./customers');
+const bills = require('./bills');
+const { findCustomer } = customers;
 
 const SERVICES = ['保价', '签收', '上门'];
 
@@ -11,7 +13,8 @@ function decorate(waybill, data) {
   const zone = zones.zoneOfCity(data, waybill.toCity);
   const index = zones.cityIndex(data);
   const known = index.has(zones.cleanCity(waybill.toCity));
-  const bill = data.bills.find((item) => item.id === waybill.billId) || null;
+  // 锁定口径跟出账一致：只有「已出账」账单占着的运单才算锁，作废账单名下的运单是自由的
+  const bill = bills.activeBillForWaybill(data, waybill);
   return Object.assign({}, waybill, {
     customerName: customer ? customer.name : '（客户已删）',
     customerCode: customer ? customer.code : '',
@@ -21,7 +24,7 @@ function decorate(waybill, data) {
     zoneKnown: known,
     billCode: bill ? bill.code : '',
     billStatus: bill ? bill.status : '',
-    locked: Boolean(waybill.billId),
+    locked: Boolean(bill),
     weightText: Number(waybill.weightKg).toFixed(2) + ' kg',
     volumeText: Number(waybill.volumeM3).toFixed(3) + ' m³',
     createdAtText: String(waybill.createdAt || '').replace('T', ' ').slice(0, 16),
@@ -109,6 +112,13 @@ function updateWaybill(id, payload) {
   const data = load();
   const current = findWaybill(data, id);
   if (!current) throw notFound('WAYBILL_NOT_FOUND', '运单不存在');
+  // 已进「已出账」账单的运单不能改；账单作废解锁后可以修改
+  const lockBill = bills.activeBillForWaybill(data, current);
+  if (lockBill) {
+    throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单 ' + lockBill.code + '，先作废账单才能修改', {
+      field: 'billId', billId: lockBill.id, billCode: lockBill.code,
+    });
+  }
   const clean = validateWaybillPayload(payload, current);
   if (data.waybills.some((waybill) => waybill.id !== id && waybill.code === clean.code)) {
     throw badRequest('WAYBILL_CODE_DUPLICATE', '运单号 ' + clean.code + ' 已经存在', { field: 'code' });
@@ -123,7 +133,12 @@ function removeWaybill(id) {
   const data = load();
   const current = findWaybill(data, id);
   if (!current) throw notFound('WAYBILL_NOT_FOUND', '运单不存在');
-  if (current.billId) throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单，不能直接删', { field: 'billId' });
+  const lockBill = bills.activeBillForWaybill(data, current);
+  if (lockBill) {
+    throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单 ' + lockBill.code + '，不能直接删', {
+      field: 'billId', billId: lockBill.id, billCode: lockBill.code,
+    });
+  }
   data.waybills = data.waybills.filter((waybill) => waybill.id !== id);
   save(data);
   return { removed: id };

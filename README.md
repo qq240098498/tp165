@@ -18,7 +18,7 @@ npm start
 - 运单计费：对单条运单算一次费用，结果会记在这条运单上，页面上直接能看到上次算出来的数
 - 分区：维护分区编码、名称、覆盖城市与城市别名、首重与续重价格、偏远附加、启用状态
 - 客户：维护客户编码、名称、结算方式（月结／现结）、折扣、账期日
-- 账单：按账期与客户出账，查看账单总额与逐条明细，可以把账单作废
+- 账单：按账期与客户出账，出账前可检查这批运单里哪些已经入账；查看账单总额与逐条明细，作废账单会解锁名下运单
 
 ## 计费口径
 
@@ -27,7 +27,15 @@ npm start
 3. 运费不低于最低收费（默认 8 元）
 4. 附加费 = 偏远附加（按分区）+ 超规附加（计费重量超过 30kg 或件数达到 3 件，20 元）+ 保价费（保价金额 × 2%）
 5. 月结客户按折扣作用于运费与附加费合计，现结客户不打折；金额以元为单位，页面保留两位小数
-6. 账期按运单创建时刻所在的月份归集；运单进账单之后会被锁定，不能再直接删改
+6. 账期按运单创建时刻所在的月份归集；运单进「已出账」账单之后会被锁定，不能再直接删改
+
+## 出账防重与作废解锁
+
+- 出账前可以先调 `POST /api/bills/preflight`，返回这批候选运单拆成的两组：`available`（可以出账）与 `alreadyBilled`（已经入账，含占用它的账单号），页面上分组列出
+- 只要这批运单里有一条还在某张「已出账」账单里，`POST /api/bills/generate` 整笔拒绝（409 `BILL_WAYBILLS_ALREADY_BILLED`），错误详情给出是哪几条、在哪张账单；必须先作废原账单
+- 作废账单（`POST /api/bills/:id/void`）会把名下运单解锁：运单上的 `billId` 清空，账单记录 `releasedWaybillIds` 与返回体里的 `releasedWaybills` 写明解锁了哪几条；解锁后的运单可以修改、删除或重新出账
+- 同一批运单误入多张已出账账单时，作废按"是否还被其他已出账账单占用"判定是否解锁：最后一张作废时运单才真正放开
+- 锁定的事实来源是「已出账」账单的 `waybillIds`；数据加载时会自动清掉指向已作废/不存在账单的残留 `billId`（修复历史脏数据）
 
 ## 目录
 
@@ -55,8 +63,8 @@ GET    /api/customers            POST /api/customers  PATCH|DELETE /api/customer
 GET    /api/waybills             POST /api/waybills   PATCH|DELETE /api/waybills/:id
 POST   /api/waybills/:id/quote
 GET    /api/bills                GET /api/bills/:id
-POST   /api/bills/generate       POST /api/bills/:id/void
+POST   /api/bills/preflight      POST /api/bills/generate       POST /api/bills/:id/void
 GET    /api/periods
 ```
 
-出账入参：`{ "period": "2026-09", "customerId": "cust-0001" }`
+出账入参：`{ "period": "2026-09", "customerId": "cust-0001" }`（preflight 同入参，返回可出账/已入账两组明细）

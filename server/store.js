@@ -50,6 +50,12 @@ function normalize(raw) {
   out.bills.forEach((bill) => {
     if (!Array.isArray(bill.waybillIds)) bill.waybillIds = [];
   });
+  // 锁的事实来源是「已出账」账单的 waybillIds：作废账单的运单必须解锁，
+  // 已作废/已删除账单残留在运单上的 billId 一律清掉，避免出现「账单作废了运单还锁着」
+  const issuedBillIds = new Set(out.bills.filter((bill) => bill.status === '已出账').map((bill) => bill.id));
+  out.waybills.forEach((waybill) => {
+    if (waybill.billId && !issuedBillIds.has(waybill.billId)) waybill.billId = null;
+  });
   return out;
 }
 
