@@ -593,3 +593,64 @@ tbody tr:hover td { background: var(--slate-soft); }
   .tabs { height: 42px; }
   .topbar-side { width: 100%; }
 }
+
+/* ---------------- 出账前检查预览 ---------------- */
+.bill-preview {
+  margin: 4px 0 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--slate-soft);
+}
+.preview-head {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.preview-title {
+  flex: 1 1 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-line);
+  color: var(--brand-dark);
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+.preview-title b { font-size: 14px; margin: 0 2px; }
+.preview-title.is-warn {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+.preview-cols { display: flex; flex-direction: column; gap: 8px; }
+.preview-col h5 {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.preview-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.preview-list li:last-child { border-bottom: none; }
+.preview-list li .code { font-weight: 600; color: var(--ink); }
+.preview-list li .muted { flex: 1 1 auto; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-list.is-locked { border-color: var(--danger-line); background: var(--danger-soft); }
+.preview-list.is-locked li .chip { flex: 0 0 auto; padding: 1px 7px; }

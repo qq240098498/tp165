@@ -87,6 +87,7 @@ function createRouter() {
 
   router.get('/bills', (req, res) => res.json(bills.listBills(req.query || {})));
   router.get('/periods', (req, res) => res.json(bills.listPeriods()));
+  router.post('/bills/preview', (req, res) => res.json(bills.previewBill(req.body || {})));
   router.post('/bills/generate', (req, res) => res.status(201).json(bills.generateBill(req.body || {})));
   router.get('/bills/:id', (req, res) => res.json(bills.getBill(req.params.id)));
   router.post('/bills/:id/void', (req, res) => res.json(bills.voidBill(req.params.id)));

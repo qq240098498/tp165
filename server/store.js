@@ -50,6 +50,32 @@ function normalize(raw) {
   out.bills.forEach((bill) => {
     if (!Array.isArray(bill.waybillIds)) bill.waybillIds = [];
   });
+  // 历史数据修复：旧版作废只改账单状态、不清运单的 billId，这里按作废当时的归属补解锁；
+  // 若作废账单名下的运单还被别的有效账单占着（历史重复出账），保持锁定并把指针改给那张账单
+  const billIndex = new Map(out.bills.map((bill) => [bill.id, bill]));
+  const findOtherActiveOwner = (waybillId, exceptId) => out.bills.find((item) => (
+    item.id !== exceptId && item.status !== '已作废' && (item.waybillIds || []).indexOf(waybillId) >= 0
+  )) || null;
+  out.bills.forEach((bill) => {
+    if (bill.status !== '已作废' || Array.isArray(bill.unlockedWaybillIds)) return;
+    const unlocked = [];
+    (bill.waybillIds || []).forEach((waybillId) => {
+      const waybill = out.waybills.find((item) => item.id === waybillId);
+      if (!waybill) return;
+      const other = findOtherActiveOwner(waybillId, bill.id);
+      if (other) {
+        if (waybill.billId === bill.id) waybill.billId = other.id;
+        return;
+      }
+      unlocked.push(waybillId);
+      if (waybill.billId === bill.id) waybill.billId = null;
+    });
+    bill.unlockedWaybillIds = unlocked;
+  });
+  // 指向已删除账单的悬空 billId 也松开
+  out.waybills.forEach((waybill) => {
+    if (waybill.billId && !billIndex.has(waybill.billId)) waybill.billId = null;
+  });
   return out;
 }
 

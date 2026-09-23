@@ -3,6 +3,7 @@ const { load, save, nextId } = require('./store');
 const pricing = require('./pricing');
 const zones = require('./zones');
 const { findCustomer } = require('./customers');
+const bills = require('./bills');
 
 const SERVICES = ['保价', '签收', '上门'];
 
@@ -11,7 +12,8 @@ function decorate(waybill, data) {
   const zone = zones.zoneOfCity(data, waybill.toCity);
   const index = zones.cityIndex(data);
   const known = index.has(zones.cleanCity(waybill.toCity));
-  const bill = data.bills.find((item) => item.id === waybill.billId) || null;
+  // 只有挂在有效（未作废）账单上才算锁定；作废账单名下的运单视作未入账
+  const bill = bills.lockingBillOf(data, waybill);
   return Object.assign({}, waybill, {
     customerName: customer ? customer.name : '（客户已删）',
     customerCode: customer ? customer.code : '',
@@ -109,6 +111,12 @@ function updateWaybill(id, payload) {
   const data = load();
   const current = findWaybill(data, id);
   if (!current) throw notFound('WAYBILL_NOT_FOUND', '运单不存在');
+  const lock = bills.lockingBillOf(data, current);
+  if (lock) {
+    throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单（' + lock.code + '），先作废账单才能修改', {
+      field: 'billId', billId: lock.id, billCode: lock.code,
+    });
+  }
   const clean = validateWaybillPayload(payload, current);
   if (data.waybills.some((waybill) => waybill.id !== id && waybill.code === clean.code)) {
     throw badRequest('WAYBILL_CODE_DUPLICATE', '运单号 ' + clean.code + ' 已经存在', { field: 'code' });
@@ -123,7 +131,12 @@ function removeWaybill(id) {
   const data = load();
   const current = findWaybill(data, id);
   if (!current) throw notFound('WAYBILL_NOT_FOUND', '运单不存在');
-  if (current.billId) throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单，不能直接删', { field: 'billId' });
+  const lock = bills.lockingBillOf(data, current);
+  if (lock) {
+    throw badRequest('WAYBILL_LOCKED', '这条运单已经进账单（' + lock.code + '），不能直接删', {
+      field: 'billId', billId: lock.id, billCode: lock.code,
+    });
+  }
   data.waybills = data.waybills.filter((waybill) => waybill.id !== id);
   save(data);
   return { removed: id };

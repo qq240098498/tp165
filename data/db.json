@@ -2,7 +2,7 @@
   "meta": {
     "name": "运单计费与账单核对台",
     "currency": "CNY",
-    "updatedAt": "2026-09-22T12:48:30.802Z"
+    "updatedAt": "2026-09-23T14:17:53.024Z"
   },
   "settings": {
     "volumetricDivisor": 6000,
@@ -273,7 +273,7 @@
       "services": [],
       "status": "已签收",
       "createdAt": "2026-07-05T09:00:00+08:00",
-      "billId": "bill-0001",
+      "billId": null,
       "quoteCacheYuan": null
     },
     {
@@ -289,7 +289,7 @@
       "services": [],
       "status": "已签收",
       "createdAt": "2026-07-12T10:30:00+08:00",
-      "billId": "bill-0001",
+      "billId": null,
       "quoteCacheYuan": null
     },
     {
@@ -305,7 +305,7 @@
       "services": [],
       "status": "已签收",
       "createdAt": "2026-07-20T13:20:00+08:00",
-      "billId": "bill-0001",
+      "billId": null,
       "quoteCacheYuan": null
     },
     {
@@ -321,7 +321,7 @@
       "services": [],
       "status": "已签收",
       "createdAt": "2026-07-28T17:10:00+08:00",
-      "billId": "bill-0001",
+      "billId": null,
       "quoteCacheYuan": null
     },
     {
@@ -420,7 +420,7 @@
       "services": [],
       "status": "已签收",
       "createdAt": "2026-09-02T09:30:00+08:00",
-      "billId": null,
+      "billId": "bill-0005",
       "quoteCacheYuan": null
     },
     {
@@ -436,7 +436,7 @@
       "services": [],
       "status": "在途",
       "createdAt": "2026-09-05T14:15:00+08:00",
-      "billId": null,
+      "billId": "bill-0005",
       "quoteCacheYuan": null
     },
     {
@@ -452,7 +452,7 @@
       "services": [],
       "status": "待发",
       "createdAt": "2026-09-08T08:40:00+08:00",
-      "billId": null,
+      "billId": "bill-0005",
       "quoteCacheYuan": null
     },
     {
@@ -545,7 +545,13 @@
       ],
       "amountYuan": 53.41,
       "discountPermille": 980,
-      "voidedAt": "2026-09-22T12:48:30.747Z"
+      "voidedAt": "2026-09-22T12:48:30.747Z",
+      "unlockedWaybillIds": [
+        "wb-0009",
+        "wb-0010",
+        "wb-0011",
+        "wb-0012"
+      ]
     },
     {
       "id": "bill-0002",
@@ -768,6 +774,50 @@
       ],
       "amountYuan": 269.3915,
       "discountPermille": 950
+    },
+    {
+      "id": "bill-0005",
+      "code": "ZD202609-C0301",
+      "period": "2026-09",
+      "customerId": "cust-0003",
+      "status": "已出账",
+      "createdAt": "2026-09-23T14:17:53.024Z",
+      "waybillIds": [
+        "wb-0018",
+        "wb-0019",
+        "wb-0020"
+      ],
+      "lines": [
+        {
+          "waybillId": "wb-0018",
+          "code": "YD20260902018",
+          "toCity": "云岭",
+          "zoneName": "省内",
+          "billableKg": 1.5,
+          "amountYuan": 7.06,
+          "fromCache": false
+        },
+        {
+          "waybillId": "wb-0019",
+          "code": "YD20260905019",
+          "toCity": "青峰",
+          "zoneName": "省内",
+          "billableKg": 3,
+          "amountYuan": 14.12,
+          "fromCache": false
+        },
+        {
+          "waybillId": "wb-0020",
+          "code": "YD20260908020",
+          "toCity": "江城",
+          "zoneName": "省内",
+          "billableKg": 4,
+          "amountYuan": 18.82,
+          "fromCache": false
+        }
+      ],
+      "amountYuan": 40,
+      "discountPermille": 1000
     }
   ]
 }
